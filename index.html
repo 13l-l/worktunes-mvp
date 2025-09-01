@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WorkTunes MVP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .timer-display {
+            font-family: 'Courier New', monospace;
+            font-size: 4rem;
+            font-weight: bold;
+        }
+        .category-btn {
+            transition: all 0.2s ease;
+        }
+        .category-btn:hover {
+            transform: translateY(-2px);
+        }
+        .category-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        /* YouTube プレイヤーを完全に隠す */
+        #youtube-player {
+          position: absolute;
+          left: -9999px;
+          top: -9999px;
+          width: 1px;
+          height: 1px;
+          opacity: 0;
+          pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">WorkTunes</h1>
+            <p class="text-gray-600">Focus with music, track your progress</p>
+        </div>
+
+    <!-- Playlist Modal -->
+    <div id="playlistModal" class="fixed inset-0 z-30 hidden">
+        <div class="absolute inset-0 bg-black/60"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="w-full max-w-4xl bg-gray-900 border border-gray-800 rounded-lg shadow-lg">
+                <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                    <h3 class="font-semibold">Create/Edit Playlist</h3>
+                    <button id="playlistCloseBtn" class="text-gray-400 hover:text-gray-200"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-4 space-y-3">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">Playlist Name</label>
+                        <input id="playlistNameInput" type="text" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm" placeholder="My Playlist" maxlength="40">
+                    </div>
+                    <!-- Two-column block -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Left: All tracks with search/sort -->
+                        <div class="border border-gray-800 rounded">
+                            <div class="px-3 py-2 border-b border-gray-800 flex items-center gap-2">
+                                <input id="plSearchInput" type="text" placeholder="Search tracks" class="flex-1 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm">
+                                <select id="plSortSelect" class="px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm">
+                                    <option value="name">Name</option>
+                                    <option value="category">Category</option>
+                                </select>
+                            </div>
+                            <div id="playlistAllTracksList" class="max-h-64 overflow-y-auto p-2 space-y-1">
+                                <!-- left items injected: checkbox to add -->
+                            </div>
+                        </div>
+                        <!-- Right: Selected tracks (reorderable) -->
+                        <div class="border border-gray-800 rounded">
+                            <div class="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+                                <span class="text-sm text-gray-400">Selected (drag to reorder)</span>
+                                <button id="plClearBtn" class="text-xs px-2 py-1 bg-gray-800 border border-gray-700 rounded hover:bg-gray-700">Clear</button>
+                            </div>
+                            <div id="playlistSelectedList" class="max-h-64 overflow-y-auto p-2 space-y-1">
+                                <!-- right items injected: removable and draggable -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="px-4 py-3 border-t border-gray-800 flex items-center justify-end gap-2">
+                    <button id="playlistCancelBtn" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-sm">Cancel</button>
+                    <button id="playlistSaveBtn" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <!-- Corner: Top Left (Timer Settings) -->
+        <div class="fixed top-4 left-4 z-10 w-64">
+            <h3 class="font-semibold text-gray-200 mb-2">Timer Settings</h3>
+            <div class="space-y-2">
+                <button class="timer-preset w-full py-2 px-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-sm transition-colors" data-minutes="25">25 minutes</button>
+                <button class="timer-preset w-full py-2 px-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-sm transition-colors" data-minutes="50">50 minutes</button>
+                <div class="flex gap-2">
+                    <input type="number" id="customMinutes" class="flex-1 px-2 py-1 bg-gray-800 text-gray-100 border border-gray-700 rounded text-sm" placeholder="Custom" min="1" max="120">
+                    <button id="setCustom" class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm">Set</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Edge: Music Panel (Scrollable List + Filter + Upload) -->
+        <aside class="fixed top-4 right-4 bottom-4 z-10 w-72 flex flex-col">
+            <h3 class="font-semibold text-gray-200 mb-2">Music</h3>
+            <div class="flex items-center gap-2 mb-3">
+                <select id="musicFilter" class="flex-1 bg-gray-800 text-gray-100 border border-gray-700 rounded px-2 py-1 text-sm">
+                    <option value="All">All</option>
+                    <option value="mp3">MP3</option>
+                    <option value="youtube">YouTube</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <input type="file" id="mp3Upload" accept=".mp3" multiple class="hidden">
+                <button id="uploadBtn" class="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 rounded text-sm transition-colors">
+                    <i class="fas fa-upload mr-2"></i>Add MP3
+                </button>
+                <div class="text-xs text-gray-400 mt-1">Max 5 files, 10MB each</div>
+            </div>
+            <div class="mb-3">
+                <div class="flex gap-2">
+                    <input type="text" id="youtubeUrlInput" class="flex-1 px-2 py-2 bg-gray-800 text-gray-100 border border-gray-700 rounded text-sm" placeholder="Paste YouTube URL (e.g. https://youtu.be/...)" />
+                    <button id="addYoutubeBtn" class="px-3 py-2 bg-red-600 hover:bg-red-500 rounded text-sm">Add</button>
+                </div>
+                <div class="text-xs text-gray-400 mt-1">YouTubeリンクを追加するとリストに表示されます（音声のみ再生）。</div>
+            </div>
+            <div class="mb-3">
+                <button id="createPlaylistBtn" class="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 rounded text-sm transition-colors">
+                    <i class="fas fa-list mr-2"></i>Create Playlist
+                </button>
+            </div>
+            <div id="musicList" class="flex-1 overflow-y-auto space-y-1 pr-1">
+                <!-- dynamically rendered list items -->
+            </div>
+            <div class="mt-3 border-t border-gray-800 pt-2">
+                <div class="flex items-center justify-between mb-1">
+                    <h4 class="text-sm text-gray-300">Playlists</h4>
+                    <span class="text-xs text-gray-500" id="playlistsCount"></span>
+                </div>
+                <div id="playlistsList" class="space-y-1 max-h-40 overflow-y-auto pr-1">
+                    <!-- playlists rendered here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center: Timer Area (no card) -->
+        <div class="flex justify-center min-h-[60vh] items-center">
+            <div class="text-center p-4">
+                <div class="timer-display text-6xl text-gray-100 mb-6" id="timerDisplay">25:00</div>
+                
+                <!-- Work Input -->
+                <div class="mb-6">
+                    <input type="text" id="workInput" class="w-full max-w-xl mx-auto px-4 py-2 bg-gray-800 border-2 border-gray-700 text-gray-100 rounded-lg focus:border-blue-500 focus:outline-none" placeholder="What are you working on?" maxlength="100">
+                </div>
+                
+                <!-- Play/Pause + Complete Buttons -->
+                <div class="flex items-center justify-center gap-3">
+                    <button id="playPauseBtn" class="bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-full text-xl transition-colors">
+                        <i class="fas fa-play" id="playPauseIcon"></i>
+                    </button>
+                    <button id="completeSessionBtn" class="bg-green-600 hover:bg-green-500 text-white px-5 py-3 rounded-full text-base transition-colors">
+                        <i class="fas fa-check mr-2"></i>Complete
+                    </button>
+                </div>
+                
+                <!-- Current Track Info & Volume -->
+                <div class="mt-4 text-sm text-gray-300">
+                    <div id="currentTrack">No music selected</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Corner: Bottom Left (Work Log) -->
+        <div class="fixed bottom-28 left-4 z-10 w-72">
+            <h3 class="font-semibold text-gray-700 mb-2">Work Log</h3>
+            <div id="workLog" class="space-y-2 text-sm">
+                <button id="openWorkLogBtn" class="w-full py-2 px-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-sm">View Work Log</button>
+                <div id="workLogSummary" class="text-xs text-gray-400 text-center"></div>
+            </div>
+        </div>
+        
+        <!-- Work Log Modal -->
+        <div id="workLogModal" class="fixed inset-0 z-40 hidden">
+            <div class="absolute inset-0 bg-black/60" data-close="1"></div>
+            <div class="absolute inset-0 flex items-center justify-center p-4">
+                <div class="w-full max-w-5xl bg-gray-900 border border-gray-800 rounded-lg shadow-lg">
+                    <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                        <h3 class="font-semibold">Work Log</h3>
+                        <button id="workLogCloseBtn" class="text-gray-400 hover:text-gray-200"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="p-6">
+                        <div id="workLogChartModal" class="mx-auto" style="height:420px; max-width: 720px;"></div>
+                        <div id="workLogTooltip" class="fixed z-50 pointer-events-none px-2 py-1 text-xs rounded bg-gray-800 text-gray-100 border border-gray-700 hidden"></div>
+                        <div id="workLogTotalLabel" class="text-xs text-gray-400 mt-3 text-center"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Elements -->
+    <audio id="audioPlayer"></audio>
+    <!-- Hidden YouTube iframe for audio-only playback -->
+    <iframe 
+      id="youtube-player"
+      src="about:blank"
+      width="1" 
+      height="1"
+      frameborder="0"
+      allow="autoplay; encrypted-media">
+    </iframe>
+
+    <!-- Bottom Player Bar -->
+    <div id="playerBar" class="fixed left-0 right-0 bottom-0 z-20 bg-gray-950/90 border-t border-gray-800">
+        <div class="max-w-6xl mx-auto px-4 py-3 grid grid-cols-12 gap-4 items-center">
+            <!-- Left: Track info -->
+            <div class="col-span-4 flex items-center gap-3 min-w-0">
+                <div class="w-10 h-10 bg-gray-800 rounded flex items-center justify-center text-gray-400">
+                    <i class="fas fa-music"></i>
+                </div>
+                <div class="truncate">
+                    <div id="playerTrackTitle" class="truncate text-sm">No music selected</div>
+                    <div class="text-xs text-gray-400">
+                        <span id="playerCurrentTime">0:00</span> / <span id="playerDuration">0:00</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Center: Controls + Seek -->
+            <div class="col-span-5 flex flex-col gap-2">
+                <div class="flex items-center justify-center gap-3">
+                    <button id="playerPlayBtn" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white" aria-label="Play">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button id="playerPauseBtn" class="px-4 py-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700" aria-label="Pause">
+                        <i class="fas fa-pause"></i>
+                    </button>
+                    <button id="playerLoopBtn" class="px-3 py-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700" aria-pressed="false" aria-label="Loop">
+                        <i class="fas fa-redo"></i>
+                    </button>
+                    <button id="playerShuffleBtn" class="px-3 py-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700" aria-pressed="false" aria-label="Shuffle">
+                        <i class="fas fa-random"></i>
+                    </button>
+                </div>
+                <input type="range" id="seekSlider" min="0" max="100" value="0" class="w-full">
+                <div id="ytNotice" class="hidden text-center text-xs text-amber-400">
+                    YouTube再生中はボトムバーの操作（シーク・音量）は無効です。製品版で対応予定です。
+                </div>
+            </div>
+            <!-- Right: Volume -->
+            <div class="col-span-3 flex items-center justify-end gap-3">
+                <i class="fas fa-volume-up text-gray-400"></i>
+                <input type="range" id="volumeSliderBottom" min="0" max="100" value="50" class="w-40">
+                <div class="text-xs w-10 text-right"><span id="volumeDisplayBottom">50</span>%</div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="src/app.js"></script>
+</body>
+</html>
